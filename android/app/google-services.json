@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "574043678818",
+    "project_id": "rxswiftmobileapplication-d8e74",
+    "storage_bucket": "rxswiftmobileapplication-d8e74.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:574043678818:android:5543e0e5af34165b87493b",
+        "android_client_info": {
+          "package_name": "com.rxswift"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATxwAAQP40KpZwMUv7x-jPZunVgcIRW9s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

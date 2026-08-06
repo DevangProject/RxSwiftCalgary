@@ -1,0 +1,61 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub/
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Build folders - IMPORTANT
+build/
+**/build/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# iOS / Xcode
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+**/DerivedData/
+**/xcuserdata/
+
+# macOS Flutter
+macos/Pods/
+macos/Flutter/ephemeral/
+
+# Android generated
+android/.gradle/
+android/local.properties
+android/key.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Signing / private credentials
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+*.mobileprovision
+
+# Service account credentials
+**/service-account*.json
+**/*service_account*.json
+**/firebase-adminsdk*.json
+**/credentials.json
+
+# Logs / temporary
+*.log
+*.tmp
+*.temp
+*.swp
