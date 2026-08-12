@@ -232,7 +232,7 @@ class _PickupPhotoSheetState extends State<_PickupPhotoSheet> {
   // ── Confirm ────────────────────────────────────────────────────────────
 
   void _confirm() {
-    if (_photoPath == null || _latitude == null || _longitude == null) {
+    if (!_canConfirm) {
       return;
     }
     setState(() => _isConfirming = true);
@@ -251,8 +251,9 @@ class _PickupPhotoSheetState extends State<_PickupPhotoSheet> {
   bool get _hasPhoto     => _photoPath != null;
   bool get _hasLocation  => _latitude != null && _longitude != null;
   bool get _hasQrCode    => _qrCode != null && _qrCode!.isNotEmpty;
+  bool get _hasProof     => _hasPhoto || _hasQrCode;
   bool get _canConfirm   =>
-      _hasPhoto && _hasLocation && !_isConfirming;
+      _hasProof && _hasLocation && !_isConfirming;
 
   String get _locationLabel {
     if (_locationLoading) return 'Getting location…';
@@ -417,8 +418,8 @@ class _PickupPhotoSheetState extends State<_PickupPhotoSheet> {
                         const Icon(Icons.check_circle_outline_rounded, size: 18),
                         const SizedBox(width: 8),
                         Text(
-                          !_hasPhoto
-                              ? 'Take photo first'
+                          !_hasProof
+                              ? 'Add photo or scan QR'
                               : !_hasLocation
                               ? 'Waiting for location…'
                               : 'Confirm Pickup',
@@ -479,7 +480,7 @@ class _CameraButton extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              'Required for pickup confirmation',
+              'Photo or QR code required',
               style: RouteText.body(RouteColors.textSecondary),
             ),
           ],
@@ -598,7 +599,7 @@ class _QrScanButton extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'Optional',
+                    'Photo or QR code required',
                     style: RouteText.body(RouteColors.textSecondary),
                   ),
                 ],

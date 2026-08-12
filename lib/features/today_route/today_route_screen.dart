@@ -183,6 +183,12 @@ class TodayRouteScreen extends ConsumerWidget {
           orders: state.unacceptedOrders,
         );
       }
+      if (state.route == null || state.route!.stops.isEmpty) {
+        return _NoRouteFoundView(
+          key: const ValueKey('no-route'),
+          onRetry: notifier.refresh,
+        );
+      }
       return _RouteBody(key: const ValueKey('body'), state: state);
     }
     return const _LoadingView(key: ValueKey('loading-fallback'));
@@ -876,6 +882,117 @@ class _ErrorView extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  No Route Found View
+// ─────────────────────────────────────────────────────────────
+
+class _NoRouteFoundView extends StatelessWidget {
+  const _NoRouteFoundView({super.key, required this.onRetry});
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const _NoRouteIllustration(),
+            const SizedBox(height: 28),
+            const Text(
+              'No routes found',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'You have no stops assigned for today yet.\nCheck back later or pull to refresh.',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 28),
+            _TryAgainButton(onTap: onRetry),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  "No route" illustration  (empty clipboard bubble + floating accents)
+// ─────────────────────────────────────────────────────────────
+
+class _NoRouteIllustration extends StatelessWidget {
+  const _NoRouteIllustration();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 200,
+      height: 200,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Positioned(top: 8, left: 16, child: _FloatingDiamond(size: 14)),
+          const Positioned(top: 30, right: 10, child: _FloatingDiamond(size: 10)),
+          const Positioned(bottom: 36, left: 4, child: _FloatingDiamond(size: 10)),
+          const Positioned(bottom: 10, right: 30, child: _FloatingDiamond(size: 14)),
+
+          // Outer soft halo
+          Container(
+            width: 180,
+            height: 180,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppColors.teal.withValues(alpha: 0.10),
+                  AppColors.teal.withValues(alpha: 0.0),
+                ],
+              ),
+            ),
+          ),
+
+          // Inner circle
+          Container(
+            width: 130,
+            height: 130,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primary.withValues(alpha: 0.14),
+                  AppColors.teal.withValues(alpha: 0.10),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: const Icon(
+              Icons.assignment_outlined,
+              size: 56,
+              color: AppColors.primary,
+            ),
+          ),
+        ],
       ),
     );
   }

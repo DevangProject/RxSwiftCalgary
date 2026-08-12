@@ -20,7 +20,8 @@ class SplashController extends ChangeNotifier {
   SplashController({
     required String assetPath,
     required this.onFinished,
-    this.slowInitThreshold = const Duration(seconds: 2),
+    this.slowInitThreshold = const Duration(seconds: 1),
+    this.playbackSpeed = 1.5,
   }) : _assetPath = assetPath;
 
   final String _assetPath;
@@ -30,6 +31,10 @@ class SplashController extends ChangeNotifier {
   /// indicator is shown to the user (requirement: show a spinner only if
   /// init takes longer than 2 seconds).
   final Duration slowInitThreshold;
+
+  /// Video playback speed multiplier — >1 shortens the splash without
+  /// needing to re-encode the video asset.
+  final double playbackSpeed;
 
   VideoPlayerController? _videoController;
   VideoPlayerController? get videoController => _videoController;
@@ -71,6 +76,9 @@ class SplashController extends ChangeNotifier {
       notifyListeners();
 
       controller.addListener(_onVideoTick);
+      // Play faster than real-time to shorten the splash without editing
+      // the video asset itself.
+      await controller.setPlaybackSpeed(playbackSpeed);
       await controller.play();
     } catch (error, stackTrace) {
       _slowInitTimer?.cancel();

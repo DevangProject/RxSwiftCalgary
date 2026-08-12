@@ -139,12 +139,12 @@ flutter:
 
 # Config for flutter_launcher_icons — regenerates native Android/iOS
 # launcher icons from a single square source image.
-# Source image goes at assets/icon/app_icon.png — must be square and 1024x1024.
+# Source image goes at assets/icon/app_icon.jpeg — must be square and 1024x1024.
 # After adding/updating that file, run: dart run flutter_launcher_icons
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/icon/app_icon.png"
+  image_path: "assets/icon/app_icon.jpeg"
   min_sdk_android: 21
   # iOS rejects launcher icons with an alpha channel — they render blank in the
   # springboard. Flatten transparency against white on the way in.

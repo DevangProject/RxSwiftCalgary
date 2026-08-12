@@ -4,7 +4,7 @@ class ApiConstants {
   ApiConstants._();
 
   // ── Base ────────────────────────────────────────────────────
-  static const String baseUrl = 'http://103.235.105.96:8086/api';
+  static const String baseUrl = 'https://api.rxswift.ca/api';
 
   // ── Timeouts ────────────────────────────────────────────────
   static const Duration connectTimeout = Duration(seconds: 15);
