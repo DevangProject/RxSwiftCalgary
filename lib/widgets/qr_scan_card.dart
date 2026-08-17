@@ -31,7 +31,7 @@ class QrScanCard extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.only(left: 2, bottom: AppSpacing.sm),
           child: Text(
-            'QR code',
+            'QR code (optional)',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -90,7 +90,7 @@ class QrScanCard extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.md),
                     const Text(
-                      'Scan the package QR code to confirm delivery',
+                      'Scan the package QR code to confirm delivery (optional)',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: AppColors.textSecondary,

@@ -1375,7 +1375,9 @@ class _TaskCard extends StatelessWidget {
                     children: [
                       // Store / patient name
                       Text(
-                        stop.patientName,
+                        stop.stopType.isPickup
+                            ? stop.pharmacyName
+                            : stop.patientName,
                         style: TextStyle(
                           fontFamily: 'Poppins',
                           fontSize: 14,

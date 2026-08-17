@@ -21,6 +21,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/notifications/data/fcm_token_remote_datasource.dart';
+import '../features/today_route/provider/today_route_provider.dart';
 
 /// Must be a top-level function — it runs in its own isolate when a message
 /// arrives while the app is backgrounded/terminated.
@@ -35,8 +36,9 @@ const _androidChannel = AndroidNotificationChannel(
 );
 
 class NotificationService {
-  NotificationService(this._tokenDataSource);
+  NotificationService(this._tokenDataSource, this._ref);
   final FcmTokenRemoteDataSource _tokenDataSource;
+  final Ref _ref;
 
   final _localNotifications = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
@@ -69,8 +71,32 @@ class NotificationService {
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_androidChannel);
 
-    FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+    FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+    FirebaseMessaging.onMessageOpenedApp.listen(_onMessageOpenedApp);
     FirebaseMessaging.instance.onTokenRefresh.listen(_sendTokenSilently);
+
+    // Cold start: app was terminated and opened by tapping a notification.
+    FirebaseMessaging.instance.getInitialMessage().then((message) {
+      if (message != null) _refreshTodayRoute();
+    });
+  }
+
+  void _onForegroundMessage(RemoteMessage message) {
+    _showForegroundNotification(message);
+    // Any push while the app is in the foreground can mean a new pickup/drop
+    // was added to (or removed from) today's route, so pull the latest.
+    _refreshTodayRoute();
+  }
+
+  void _onMessageOpenedApp(RemoteMessage message) => _refreshTodayRoute();
+
+  /// Re-fetches today's route so a new pickup/drop from a push notification
+  /// shows up immediately. No-op while the driver is offline — nothing is
+  /// loaded on screen for them to refresh yet.
+  void _refreshTodayRoute() {
+    final state = _ref.read(todayRouteProvider);
+    if (!state.isAvailable || state.isLoading) return;
+    _ref.read(todayRouteProvider.notifier).refresh();
   }
 
   void _showForegroundNotification(RemoteMessage message) {
@@ -178,5 +204,5 @@ class _DeviceInfo {
 }
 
 final notificationServiceProvider = Provider<NotificationService>(
-  (ref) => NotificationService(ref.watch(fcmTokenRemoteDataSourceProvider)),
+  (ref) => NotificationService(ref.watch(fcmTokenRemoteDataSourceProvider), ref),
 );

@@ -76,8 +76,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   void _submit() {
-    _emailController.text = "vaghelacd99@gmail.com" ;
-    _passwordController.text = "12345678";
+   /* _emailController.text = "vaghelacd99@gmail.com" ;
+    _passwordController.text = "12345678";*/
 
     FocusScope.of(context).unfocus();
 

@@ -20,6 +20,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/network/api_result.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../uttils/RouteApiConstants.dart';
+import '../../../uttils/app_constants.dart';
 import '../model/route_model.dart';
 
 // ── Pickup confirmation response ──────────────────────────────────────────
@@ -141,14 +142,20 @@ class RouteRemoteDatasource {
     );
   }
 
-  // ── Update driver availability  PATCH /api/driver/availability ────────
+  // ── Update driver availability  PATCH /api/driver/status ──────────────
+  // Online  → status "1" (ApiConstants.driverActiveStatus)
+  // Offline → status "3" (ApiConstants.driverOfflineStatus)
 
   Future<ApiResult<void>> updateDriverAvailability({
     required bool isAvailable,
   }) {
     return _dioClient.patch<void>(
       RouteApiConstants.driverAvailability,
-      data:     {'status': isAvailable ? '1' : '0'},
+      data: {
+        'status': isAvailable
+            ? ApiConstants.driverActiveStatus
+            : ApiConstants.driverOfflineStatus,
+      },
       fromJson: (_) {},
     );
   }

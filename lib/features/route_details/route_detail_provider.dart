@@ -130,7 +130,7 @@ class RouteDetailNotifier extends StateNotifier<RouteDetailState> {
       'destination': destination,
       'travelmode': 'driving',
       'dir_action': 'navigate',
-      if (origin != null) 'origin': origin,
+      'origin': ?origin,
     };
     final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
     final uri = Uri.parse('https://www.google.com/maps/dir/?$query');

@@ -96,7 +96,6 @@ class DeliveryState {
 
   bool get canComplete =>
       hasPhoto &&
-          hasQrCode &&
           status != DeliveryStatus.uploading &&
           status != DeliveryStatus.uploadSuccess;
 

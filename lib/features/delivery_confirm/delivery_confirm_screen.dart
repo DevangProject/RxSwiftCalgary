@@ -198,8 +198,6 @@ class _BottomActionBar extends StatelessWidget {
       child: _PrimaryButton(
         label: state.isUploading
             ? 'Uploading…'
-            : !state.hasQrCode
-            ? 'Scan QR code to continue'
             : 'Upload & Complete Delivery',
         icon:
         state.isUploading ? null : Icons.check_circle_outline_rounded,

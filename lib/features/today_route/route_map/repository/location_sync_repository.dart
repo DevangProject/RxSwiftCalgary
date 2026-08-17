@@ -10,7 +10,6 @@
 
 import 'package:geolocator/geolocator.dart';
 
-import '../../../../core/network/api_result.dart';
 import '../../model/location_sync_model.dart';
 import '../data/location_sync_remote_datasource.dart';
 import '../provider/driver_location_provider.dart';  // ← DriverPosition
