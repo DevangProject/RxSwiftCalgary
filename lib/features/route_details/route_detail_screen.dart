@@ -366,6 +366,13 @@ class _DetailCard extends StatelessWidget {
           _DetailRow(label: 'Service Type', value: serviceType),
           _Divider(),
 
+          // ── Refrigerated ──────────────────────────────────────
+          _DetailRow(
+            label: 'Refrigerated',
+            value: stop.isRefrigerated ? 'Yes' : 'No',
+          ),
+          _Divider(),
+
           // ── Contact Name ─────────────────────────────────────
           _DetailRow(label: 'Contact Name', value: contactName),
           _Divider(),

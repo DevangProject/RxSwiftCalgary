@@ -81,6 +81,7 @@ class RouteStop {
     required this.priority,
     required this.distanceKm,
     required this.notes,
+    required this.isRefrigerated,
   });
 
   /// Stable identity. The API doesn't send a dedicated stop id, so we derive a
@@ -109,6 +110,9 @@ class RouteStop {
 
   final String notes;
 
+  /// API `isRefrigerated` — "Yes"/"No" string, not a boolean.
+  final bool isRefrigerated;
+
   bool get hasCoordinates => latitude != 0 && longitude != 0;
 
   factory RouteStop.fromJson(Map<String, dynamic> json) {
@@ -133,6 +137,8 @@ class RouteStop {
       distanceKm:
       (json['distanceKmFromPreviousStop'] as num?)?.toDouble() ?? 0,
       notes: json['notes']?.toString() ?? '',
+      isRefrigerated:
+          json['isRefrigerated']?.toString().toLowerCase() == 'yes',
     );
   }
 
@@ -154,6 +160,7 @@ class RouteStop {
       priority: priority,
       distanceKm: distanceKm,
       notes: notes,
+      isRefrigerated: isRefrigerated,
     );
   }
 }

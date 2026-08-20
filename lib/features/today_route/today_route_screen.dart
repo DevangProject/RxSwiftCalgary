@@ -1061,24 +1061,27 @@ class _RouteBody extends ConsumerWidget {
               topSpacing: index == 0 ? 0 : 20,
             );
           case _StopItem(:final stop, :final isFirst, :final isLast):
+            final isDone = stop.status == StopStatus.completed ||
+                stop.status == StopStatus.skipped;
             return _TaskCard(
               stop: stop,
               isFirst: isFirst,
               isLast: isLast,
               isRouteActive: state.isRouteActive,
-              onMarkDone: () => ref
-                  .read(todayRouteProvider.notifier)
-                  .markStopCompleted(stop.id),
-              onTap: () async {
-                final result = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(
-                    builder: (_) => RouteDetailScreen(stop: stop),
-                  ),
-                );
-                if (result == true) {
-                  ref.read(todayRouteProvider.notifier).markStopCompleted(stop.id);
-                }
-              },
+              onTap: isDone
+                  ? null
+                  : () async {
+                      final result = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute(
+                          builder: (_) => RouteDetailScreen(stop: stop),
+                        ),
+                      );
+                      if (result == true) {
+                        ref
+                            .read(todayRouteProvider.notifier)
+                            .markStopCompleted(stop.id);
+                      }
+                    },
             );
           case _CollapseItem(:final count, :final groupLabel):
             return _MoreTasksDivider(count: count, label: groupLabel);
@@ -1286,7 +1289,6 @@ class _TaskCard extends StatelessWidget {
     required this.isFirst,
     required this.isLast,
     required this.isRouteActive,
-    required this.onMarkDone,
     required this.onTap,
   });
 
@@ -1294,8 +1296,7 @@ class _TaskCard extends StatelessWidget {
   final bool isFirst;
   final bool isLast;
   final bool isRouteActive;
-  final VoidCallback onMarkDone;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   Color get _bubbleColor {
     switch (stop.status) {
@@ -1433,6 +1434,16 @@ class _TaskCard extends StatelessWidget {
                           const SizedBox(width: 6),
                           _TypeChip(
                               type: stop.stopType, dimmed: isCompleted),
+                          if (stop.isRefrigerated) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.ac_unit_rounded,
+                              size: 13,
+                              color: isCompleted
+                                  ? AppColors.textHint
+                                  : AppColors.teal,
+                            ),
+                          ],
                           const SizedBox(width: 6),
                           Text(
                             'Ready now',
@@ -1447,37 +1458,6 @@ class _TaskCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      // Mark done button (only when in-progress)
-                      if (isInProgress) ...[
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          height: 30,
-                          child: ElevatedButton.icon(
-                            onPressed: onMarkDone,
-                            icon:
-                            const Icon(Icons.check_rounded, size: 14),
-                            label: const Text(
-                              'Mark as Done',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.teal,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                    AppRadius.full),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
