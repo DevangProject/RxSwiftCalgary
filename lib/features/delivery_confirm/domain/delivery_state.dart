@@ -4,33 +4,6 @@
 
 import 'package:flutter/foundation.dart';
 
-// ── CaptureLocation ───────────────────────────────────────────────────────
-
-@immutable
-class CaptureLocation {
-  const CaptureLocation({
-    required this.latitude,
-    required this.longitude,
-    required this.accuracy,
-    required this.formattedAddress,
-    this.address, // reverse-geocoded human address (optional)
-  });
-
-  final double latitude;
-  final double longitude;
-  final double accuracy; // metres
-  final String formattedAddress;
-  final String? address;
-
-  /// "12.97163, 77.59369" — shown in LocationInfoCard as the coordinate line.
-  String get coordinatesLabel =>
-      '${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)}'
-          '  ±${accuracy.toStringAsFixed(0)} m';
-
-  @override
-  String toString() => address ?? formattedAddress;
-}
-
 // ── DeliveryOrder ─────────────────────────────────────────────────────────
 
 @immutable
@@ -70,8 +43,6 @@ class DeliveryState {
   const DeliveryState({
     this.status = DeliveryStatus.initial,
     this.photoPath,
-    this.location,
-    this.locationWarning,
     this.errorMessage,
     this.uploadProgress = 0.0,
     this.qrCode,
@@ -79,8 +50,6 @@ class DeliveryState {
 
   final DeliveryStatus status;
   final String? photoPath;
-  final CaptureLocation? location;
-  final String? locationWarning;
   final String? errorMessage;
   final double uploadProgress;
   final String? qrCode;
@@ -88,7 +57,6 @@ class DeliveryState {
   // ── Getters ───────────────────────────────────────────────────────────────
 
   bool get hasPhoto      => photoPath != null;
-  bool get hasLocation   => location != null;   // ← used by LocationInfoCard
   bool get hasQrCode     => qrCode != null && qrCode!.isNotEmpty;
   bool get isUploading   => status == DeliveryStatus.uploading;
   bool get isSuccess     => status == DeliveryStatus.uploadSuccess;
@@ -104,22 +72,14 @@ class DeliveryState {
   DeliveryState copyWith({
     DeliveryStatus? status,
     String? photoPath,
-    CaptureLocation? location,
-    String? locationWarning,
     String? errorMessage,
     double? uploadProgress,
     String? qrCode,
-    bool clearLocation = false,
-    bool clearLocationWarning = false,
     bool clearError = false,
   }) {
     return DeliveryState(
       status: status ?? this.status,
       photoPath: photoPath ?? this.photoPath,
-      location: clearLocation ? null : (location ?? this.location),
-      locationWarning: clearLocationWarning
-          ? null
-          : (locationWarning ?? this.locationWarning),
       errorMessage:
       clearError ? null : (errorMessage ?? this.errorMessage),
       uploadProgress: uploadProgress ?? this.uploadProgress,

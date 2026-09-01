@@ -33,6 +33,9 @@ class RouteRepository {
   Future<ApiResult<bool>> acceptUnacceptedOrders(List<String> orderIds) =>
       _datasource.acceptUnacceptedOrders(orderIds);
 
+  Future<ApiResult<List<DriverOrder>>> getDriverOrders() =>
+      _datasource.getDriverOrders();
+
 // CHANGED: now requires photoPath, latitude, longitude for the new API.
   Future<ApiResult<PickupConfirmationResponse>> pickupOrder({
     required String orderId,

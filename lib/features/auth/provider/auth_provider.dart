@@ -67,9 +67,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       },
       failure: (exception) {
         final isNoInternet = exception is NoInternetException;
+
+        // A 401 during login means the credentials were rejected, not that
+        // an existing session expired — show the accurate message instead.
+        final errorMessage = exception is UnauthorisedException
+            ? 'Your email address or password has been incorrect!'
+            : exception.message;
+
         state = state.copyWith(
           status:       isNoInternet ? AuthStatus.noInternet : AuthStatus.error,
-          errorMessage: exception.message,
+          errorMessage: errorMessage,
         );
       },
     );

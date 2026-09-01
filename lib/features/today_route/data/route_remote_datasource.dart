@@ -183,6 +183,17 @@ class RouteRemoteDatasource {
     );
   }
 
+  // ── Driver orders  GET /api/driver/orders ──────────────────────────────
+
+  Future<ApiResult<List<DriverOrder>>> getDriverOrders() {
+    return _dioClient.get<List<DriverOrder>>(
+      RouteApiConstants.driverOrders,
+      fromJson: (json) => (json as List? ?? const [])
+          .map((e) => DriverOrder.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
   Future<ApiResult<PickupConfirmationResponse>> pickupOrder({
     required String orderId,
     required String photoPath,

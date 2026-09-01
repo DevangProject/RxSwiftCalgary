@@ -6,13 +6,13 @@ import 'package:rxswift/features/delivery_confirm/provider/delivery_confirmation
 
 import '../../widgets/camera_capture_area.dart';
 import '../../widgets/instruction_card.dart';
-import '../../widgets/location_info_card.dart';
 import '../../widgets/order_summary_card.dart';
 import '../../widgets/qr_scan_card.dart';
 import '../../widgets/qr_scanner_screen.dart';
 import '../../widgets/upload_status_banner.dart';
 import '../route_map/theme/route_map_theme.dart';
 import 'domain/delivery_state.dart';
+import 'widgets/delivery_success_overlay.dart';
 
 class DeliveryConfirmationScreen extends ConsumerWidget {
   const DeliveryConfirmationScreen({
@@ -49,20 +49,14 @@ class DeliveryConfirmationScreen extends ConsumerWidget {
 
     ref.listen<DeliveryState>(deliveryControllerProvider(orderId),
             (prev, next) {
+          // Upload succeeded — show the same full-screen success animation
+          // used for pickups, then auto-return to today's route once it
+          // dismisses itself. No snackbar and no manual "Done" tap needed;
+          // a snackbar here is reserved for errors/failures only (already
+          // surfaced inline by UploadStatusBanner below).
           if (prev?.status != DeliveryStatus.uploadSuccess &&
               next.status == DeliveryStatus.uploadSuccess) {
-            ScaffoldMessenger.of(context)
-              ..hideCurrentSnackBar()
-              ..showSnackBar(
-                SnackBar(
-                  backgroundColor: RouteColors.tealDark,
-                  behavior: SnackBarBehavior.floating,
-                  content: Text(
-                    'Delivery confirmed successfully.',
-                    style: RouteText.body(Colors.white),
-                  ),
-                ),
-              );
+            _onUploadSuccess(context);
           }
         });
 
@@ -120,11 +114,6 @@ class DeliveryConfirmationScreen extends ConsumerWidget {
                             }
                           },
                         ),
-                        const SizedBox(height: RouteSpacing.lg),
-                        LocationInfoCard(
-                          state: state,
-                          onRetryLocation: controller.retryLocation,
-                        ),
                       ],
                       const SizedBox(height: RouteSpacing.lg),
                       UploadStatusBanner(
@@ -145,39 +134,39 @@ class DeliveryConfirmationScreen extends ConsumerWidget {
         state: state,
         onOpenCamera: controller.openCamera,
         onComplete: controller.uploadAndComplete,
-        // Returns `true` → route_map_screen advances the stop.
-        onDone: () => Navigator.of(context).maybePop(true),
       ),
     );
   }
+
+  // Shows the full-screen success animation, then pops this screen once it
+  // auto-dismisses — `true` tells route_map_screen/route_detail_screen to
+  // advance the stop, same contract the pickup flow already relies on.
+  Future<void> _onUploadSuccess(BuildContext context) async {
+    await showDeliverySuccess(context);
+    if (!context.mounted) return;
+    Navigator.of(context).maybePop(true);
+  }
 }
 
-// ── Bottom action bar (unchanged) ─────────────────────────────────────────
+// ── Bottom action bar ──────────────────────────────────────────────────────
 
 class _BottomActionBar extends StatelessWidget {
   const _BottomActionBar({
     required this.state,
     required this.onOpenCamera,
     required this.onComplete,
-    required this.onDone,
   });
 
   final DeliveryState state;
   final VoidCallback onOpenCamera;
   final VoidCallback onComplete;
-  final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
+    // On success the full-screen animation (showDeliverySuccess) covers the
+    // screen and pops it automatically — no bottom bar/"Done" tap needed.
     if (state.isSuccess) {
-      return _BarWrapper(
-        child: _PrimaryButton(
-          label: 'Done',
-          icon: Icons.check_rounded,
-          color: RouteColors.accentGreen,
-          onPressed: onDone,
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     if (!state.hasPhoto) {

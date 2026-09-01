@@ -14,6 +14,8 @@
 //    OS/FCM behavior) — no deep-link navigation is wired up.
 // ============================================================================
 
+import 'dart:ui';
+
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -62,7 +64,7 @@ class NotificationService {
 
     await _localNotifications.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('@drawable/ic_notification'),
         iOS: DarwinInitializationSettings(),
       ),
     );
@@ -114,7 +116,8 @@ class NotificationService {
           channelDescription: _androidChannel.description,
           importance: Importance.high,
           priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+          color: Color(0xFF0097A7),
+          icon: '@drawable/ic_notification',
         ),
         iOS: const DarwinNotificationDetails(),
       ),

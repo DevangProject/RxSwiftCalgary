@@ -51,6 +51,13 @@ class RouteApiConstants {
   /// Body: { "orderIds": ["..."] }
   static const String acceptOrdersBulk = '/driver/orders/accept-bulk';
 
+  // ── Driver orders (Upcoming / Completed tabs) ───────────────────────────
+
+  /// GET — every order accepted by the driver, at any stage (pickup through
+  /// delivery), not scoped to today's route.
+  /// Full URL: http://103.235.105.96:8086/api/driver/orders
+  static const String driverOrders = '/driver/orders';
+
   // ── Order detail ──────────────────────────────────────────────────────
 
   /// GET — full detail for a single order.

@@ -7,6 +7,7 @@ import 'features/splash/splash_screen.dart';
 import 'firebase_options.dart';
 import 'service/background_location_service.dart';
 import 'service/notification_service.dart';
+import 'widgets/connectivity_banner.dart';
 
 
 void main() async {
@@ -53,6 +54,8 @@ class _RxSwiftAppState extends ConsumerState<RxSwiftApp> {
         useMaterial3: true,
         fontFamily: 'Poppins',
       ),
+      builder: (context, child) =>
+          ConnectivityBanner(child: child ?? const SizedBox.shrink()),
       home: const SplashScreen(),
     );
   }

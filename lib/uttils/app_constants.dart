@@ -6,6 +6,20 @@ class ApiConstants {
   // ── Base ────────────────────────────────────────────────────
   static const String baseUrl = 'https://api.rxswift.ca/api';
 
+  // ── Media ───────────────────────────────────────────────────
+  // Root the API serves uploaded files (pickup/delivery photos) from.
+  // `baseUrl` can't be reused directly since it carries the `/api` suffix.
+  static const String imageBaseUrl = 'https://api.rxswift.ca';
+
+  /// Prefixes a relative image path (e.g. "/uploads/pickup/xxx.jpg") returned
+  /// by the API with [imageBaseUrl]. Already-absolute URLs pass through
+  /// unchanged so this stays safe if the backend switches to full URLs later.
+  static String? resolveImageUrl(String? path) {
+    if (path == null || path.isEmpty) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    return '$imageBaseUrl${path.startsWith('/') ? path : '/$path'}';
+  }
+
   // ── Timeouts ────────────────────────────────────────────────
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 30);

@@ -71,7 +71,6 @@ class DeliveryController extends StateNotifier<DeliveryState> {
   final DeliveryRepository _repo;
   final DeliveryOrder _order;
   StreamSubscription<bool>? _connSub;
-  String? _rawPhotoPath;
 
   void _watchConnectivity() {
     _connSub = _repo.onConnectivityChanged.listen((online) {
@@ -87,7 +86,6 @@ class DeliveryController extends StateNotifier<DeliveryState> {
     state = state.copyWith(
       status: DeliveryStatus.cameraOpening,
       clearError: true,
-      clearLocationWarning: true,
     );
     try {
       final path = await _repo.captureFromCamera();
@@ -100,36 +98,9 @@ class DeliveryController extends StateNotifier<DeliveryState> {
         return;
       }
 
-      CaptureLocation? loc;
-      String? warning;
-      try {
-        loc = await _repo.getCurrentLocation();
-      } on LocationException catch (e) {
-        warning = e.message;
-      } catch (_) {
-        warning = 'Could not capture location. You can retry or proceed.';
-      }
-
-      _rawPhotoPath = path;
-      String finalPath = path;
-      if (loc != null) {
-        try {
-          finalPath = await _repo.stampLocationOnImage(
-            photoPath: path,
-            location: loc,
-          );
-        } catch (_) {
-          finalPath = path;
-        }
-      }
-
       state = state.copyWith(
         status: DeliveryStatus.photoCaptured,
-        photoPath: finalPath,
-        location: loc,
-        locationWarning: warning,
-        clearLocation: loc == null,
-        clearLocationWarning: warning == null,
+        photoPath: path,
         uploadProgress: 0.0,
         clearError: true,
       );
@@ -146,33 +117,6 @@ class DeliveryController extends StateNotifier<DeliveryState> {
   // ── QR scan ────────────────────────────────────────────────────────────────
 
   void setQrCode(String code) => state = state.copyWith(qrCode: code);
-
-  // ── Location retry ────────────────────────────────────────────────────────
-
-  Future<void> retryLocation() async {
-    if (!state.hasPhoto) return;
-    try {
-      final loc = await _repo.getCurrentLocation();
-      final raw = _rawPhotoPath ?? state.photoPath!;
-      String path = raw;
-      try {
-        path = await _repo.stampLocationOnImage(photoPath: raw, location: loc);
-      } catch (_) {
-        path = raw;
-      }
-      state = state.copyWith(
-        photoPath: path,
-        location: loc,
-        clearLocationWarning: true,
-      );
-    } on LocationException catch (e) {
-      state = state.copyWith(locationWarning: e.message);
-    } catch (_) {
-      state = state.copyWith(
-        locationWarning: 'Could not capture location. You can retry or proceed.',
-      );
-    }
-  }
 
   // ── Upload ────────────────────────────────────────────────────────────────
   //
@@ -192,7 +136,6 @@ class DeliveryController extends StateNotifier<DeliveryState> {
       await _repo.uploadDeliveryPhoto(
         orderId: _order.orderId,
         photoPath: state.photoPath!,
-        location: state.location,
         // onProgress removed
       );
       state = state.copyWith(
@@ -226,8 +169,6 @@ class DeliveryController extends StateNotifier<DeliveryState> {
     state = state.copyWith(
       status: DeliveryStatus.photoCaptured,
       photoPath: pending.photoPath,
-      location: pending.location,
-      clearLocation: pending.location == null,
     );
     await uploadAndComplete();
   }

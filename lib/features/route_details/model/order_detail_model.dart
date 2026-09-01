@@ -81,6 +81,7 @@ class OrderDetail {
     required this.pickupImageUrl,
     required this.pickupLatitude,
     required this.pickupLongitude,
+    required this.deliveryPhotoUrl,
     required this.timeline,
   });
 
@@ -135,6 +136,8 @@ class OrderDetail {
   final double? pickupLatitude;
   final double? pickupLongitude;
 
+  final String? deliveryPhotoUrl;
+
   final List<OrderTimelineEntry> timeline;
 
   factory OrderDetail.fromJson(Map<String, dynamic> json) {
@@ -183,6 +186,7 @@ class OrderDetail {
       pickupImageUrl: json['pickupImageUrl']?.toString(),
       pickupLatitude: (json['pickupLatitude'] as num?)?.toDouble(),
       pickupLongitude: (json['pickupLongitude'] as num?)?.toDouble(),
+      deliveryPhotoUrl: json['deliveryPhotoUrl']?.toString(),
       timeline: timelineJson
           .map((e) => OrderTimelineEntry.fromJson(e as Map<String, dynamic>))
           .toList(),

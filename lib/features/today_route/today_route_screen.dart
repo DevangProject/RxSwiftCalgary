@@ -7,6 +7,7 @@ import '../../core/network/auth_repository_impl.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_progress_dialoug.dart';
 import '../auth/login_screen.dart';
+import '../route_details/completed_order_detail_screen.dart';
 import '../route_details/route_detail_screen.dart';
 import 'model/route_model.dart';
 
@@ -54,11 +55,35 @@ Future<void> _signOutAndGoToLogin(BuildContext context, WidgetRef ref) async {
 }
 
 
-class TodayRouteScreen extends ConsumerWidget {
+enum _TasksTab { upcoming, completed }
+
+class TodayRouteScreen extends ConsumerStatefulWidget {
   const TodayRouteScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TodayRouteScreen> createState() => _TodayRouteScreenState();
+}
+
+class _TodayRouteScreenState extends ConsumerState<TodayRouteScreen> {
+  _TasksTab _selectedTab = _TasksTab.upcoming;
+
+  void _selectTab(_TasksTab tab) {
+    if (_selectedTab == tab) return;
+    setState(() => _selectedTab = tab);
+
+    // Lazily fetch GET /driver/orders the first time the Completed tab is
+    // opened — but only when the day actually has delivered orders, per the
+    // today-route response's totalDeliveredOrders count.
+    if (tab == _TasksTab.completed) {
+      final route = ref.read(todayRouteProvider).route;
+      if ((route?.totalDeliveredOrders ?? 0) > 0) {
+        ref.read(todayRouteProvider.notifier).loadDriverOrders();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(todayRouteProvider);
     final notifier = ref.read(todayRouteProvider.notifier);
 
@@ -82,6 +107,16 @@ class TodayRouteScreen extends ConsumerWidget {
           _signOutAndGoToLogin(context, ref);
         }
         return;
+      }
+
+      // ── Orders just accepted (swipe-to-accept) ──
+      // Land back on the Upcoming tab even if Completed was selected before
+      // — the driver just accepted new work, they shouldn't have to find
+      // their way back to it manually.
+      if (previous?.hasUnacceptedOrders == true &&
+          !next.hasUnacceptedOrders &&
+          _selectedTab != _TasksTab.upcoming) {
+        setState(() => _selectedTab = _TasksTab.upcoming);
       }
 
       final msg = next.availabilityErrorMessage;
@@ -133,7 +168,18 @@ class TodayRouteScreen extends ConsumerWidget {
                   totalStops: state.hasUnacceptedOrders
                       ? state.unacceptedOrders.length
                       : (state.route?.totalStops ?? 0),
-                  completedStops: state.completedStops,
+                  completedStops:
+                      state.route?.totalDeliveredOrders ?? state.completedStops,
+                ),
+
+              // ── Upcoming / Completed tab toggle ────────────────
+              if (_showTabs(state))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  child: _TasksTabBar(
+                    selected: _selectedTab,
+                    onSelect: _selectTab,
+                  ),
                 ),
 
               // ── Body ──────────────────────────────────────────
@@ -157,6 +203,18 @@ class TodayRouteScreen extends ConsumerWidget {
       ),
     );
   }
+
+  /// Tabs only make sense once today's route has actually loaded with stops
+  /// — not while offline, loading, erroring, or showing unaccepted orders.
+  /// Shown when there's either an upcoming stop or a delivered order to
+  /// look at, so Completed stays reachable even once every stop is done and
+  /// today-route's `stops` list has emptied out.
+  bool _showTabs(TodayRouteState state) =>
+      state.isAvailable &&
+      state.isLoaded &&
+      !state.hasUnacceptedOrders &&
+      state.route != null &&
+      (state.route!.stops.isNotEmpty || state.route!.totalDeliveredOrders > 0);
 
   Widget _buildBody(BuildContext context, TodayRouteState state,
       TodayRouteNotifier notifier, WidgetRef ref) {
@@ -183,15 +241,373 @@ class TodayRouteScreen extends ConsumerWidget {
           orders: state.unacceptedOrders,
         );
       }
-      if (state.route == null || state.route!.stops.isEmpty) {
+      final hasStops = state.route != null && state.route!.stops.isNotEmpty;
+      final hasDeliveredOrders = (state.route?.totalDeliveredOrders ?? 0) > 0;
+
+      // Genuinely nothing for the driver today — no upcoming stops and
+      // nothing delivered yet either. Nothing to put tabs over.
+      if (!hasStops && !hasDeliveredOrders) {
         return _NoRouteFoundView(
           key: const ValueKey('no-route'),
           onRetry: notifier.refresh,
         );
       }
-      return _RouteBody(key: const ValueKey('body'), state: state);
+
+      // Stops still running or waiting to start — once a stop is marked
+      // completed it belongs to the Completed tab, not here.
+      final hasActiveStops = state.route != null &&
+          state.route!.stops.any((s) =>
+              s.status != StopStatus.completed &&
+              s.status != StopStatus.skipped);
+
+      return switch (_selectedTab) {
+        // Today's route has no upcoming stops left (they've all been
+        // delivered) — keep the tabs visible so Completed stays reachable,
+        // but the Upcoming tab itself has nothing to show.
+        _TasksTab.upcoming => hasActiveStops
+            ? _RouteBody(key: const ValueKey('upcoming'), state: state)
+            : _NoRouteFoundView(
+                key: const ValueKey('upcoming-empty'),
+                onRetry: notifier.refresh,
+              ),
+        _TasksTab.completed => _CompletedOrdersBody(
+            key: const ValueKey('completed'),
+            state: state,
+            onRetry: () => notifier.loadDriverOrders(force: true),
+          ),
+      };
     }
     return const _LoadingView(key: ValueKey('loading-fallback'));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Upcoming / Completed segmented tab control
+// ─────────────────────────────────────────────────────────────
+
+class _TasksTabBar extends StatelessWidget {
+  const _TasksTabBar({required this.selected, required this.onSelect});
+  final _TasksTab selected;
+  final ValueChanged<_TasksTab> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _TabSegment(
+              label: 'Upcoming',
+              isSelected: selected == _TasksTab.upcoming,
+              onTap: () => onSelect(_TasksTab.upcoming),
+            ),
+          ),
+          Expanded(
+            child: _TabSegment(
+              label: 'Completed',
+              isSelected: selected == _TasksTab.completed,
+              onTap: () => onSelect(_TasksTab.completed),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabSegment extends StatelessWidget {
+  const _TabSegment({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.full),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: isSelected ? Colors.white : AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Completed tab body  (GET /driver/orders, filtered to delivered/failed)
+// ─────────────────────────────────────────────────────────────
+
+class _CompletedOrdersBody extends StatelessWidget {
+  const _CompletedOrdersBody({
+    super.key,
+    required this.state,
+    required this.onRetry,
+  });
+
+  final TodayRouteState state;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.isDriverOrdersLoading && state.driverOrders.isEmpty) {
+      return const _LoadingView();
+    }
+
+    if (state.isDriverOrdersError && state.driverOrders.isEmpty) {
+      return _ErrorView(
+        message: state.driverOrdersErrorMessage ?? 'Something went wrong.',
+        onRetry: onRetry,
+      );
+    }
+
+    final completed = state.completedDriverOrders;
+
+    if (completed.isEmpty) {
+      return const _EmptyCompletedView();
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      itemCount: completed.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return _SectionHeader(
+            label: 'Completed',
+            icon: Icons.check_circle_rounded,
+            color: AppColors.success,
+            count: completed.length,
+            topSpacing: 0,
+          );
+        }
+        final order = completed[index - 1];
+        return _CompletedOrderCard(order: order);
+      },
+    );
+  }
+}
+
+class _EmptyCompletedView extends StatelessWidget {
+  const _EmptyCompletedView();
+
+  @override
+  Widget build(BuildContext context) {
+    return _ScrollableCenter(
+      padding: const EdgeInsets.symmetric(horizontal: 36),
+      child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_outline_rounded,
+                size: 48, color: AppColors.textSecondary),
+            SizedBox(height: 16),
+            Text(
+              'No completed tasks yet',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 6),
+            Text(
+              'Delivered and failed orders will show up here.',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+    );
+  }
+}
+
+class _CompletedOrderCard extends StatelessWidget {
+  const _CompletedOrderCard({required this.order});
+  final DriverOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDelivered = order.status.toUpperCase() == 'DELIVERED';
+    final statusColor = isDelivered ? AppColors.success : AppColors.danger;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => showCompletedOrderDetail(context, order.id),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: AppColors.border.withValues(alpha: 0.70)),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.textPrimary.withValues(alpha: 0.05),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(width: 4, color: statusColor),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  isDelivered
+                                      ? Icons.check_rounded
+                                      : Icons.close_rounded,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    order.patientName,
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    order.deliveryAddress,
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w400,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Service Type: - Regular',
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w400,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          '#${order.orderNumber}',
+                                          style: const TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: statusColor.withValues(alpha: 0.10),
+                                          borderRadius:
+                                              BorderRadius.circular(AppRadius.full),
+                                        ),
+                                        child: Text(
+                                          order.statusLabel.isNotEmpty
+                                              ? order.statusLabel
+                                              : (isDelivered ? 'Delivered' : 'Failed'),
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: statusColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 20,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -618,46 +1034,73 @@ class _StatChip extends StatelessWidget {
 //  Availability Required View
 // ─────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────
+//  Scrollable centered content — behaves like `Center` when there's
+//  enough vertical room, but scrolls instead of overflowing when the
+//  available height (e.g. below the tab bar) is too tight for it.
+// ─────────────────────────────────────────────────────────────
+
+class _ScrollableCenter extends StatelessWidget {
+  const _ScrollableCenter({required this.padding, required this.child});
+  final EdgeInsets padding;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: padding,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight - padding.vertical,
+            ),
+            child: Center(child: child),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _AvailabilityRequiredView extends StatelessWidget {
   const _AvailabilityRequiredView({super.key, required this.onRetry});
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 36),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _OfflineIllustration(),
-            const SizedBox(height: 28),
-            const Text(
-              'You are currently offline',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 19,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-              textAlign: TextAlign.center,
+    return _ScrollableCenter(
+      padding: const EdgeInsets.fromLTRB(36, 24, 36, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _OfflineIllustration(),
+          const SizedBox(height: 28),
+          const Text(
+            'You are currently offline',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 19,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Please turn on availability to find today\'s task list.',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-                color: AppColors.textSecondary,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Please turn on availability to find today\'s task list.',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: AppColors.textSecondary,
+              height: 1.5,
             ),
-            const SizedBox(height: 28),
-            _TryAgainButton(onTap: onRetry),
-          ],
-        ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+          _TryAgainButton(onTap: onRetry),
+        ],
       ),
     );
   }
@@ -845,10 +1288,9 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
+    return _ScrollableCenter(
+      padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
+      child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.cloud_off_rounded,
@@ -882,7 +1324,6 @@ class _ErrorView extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }
@@ -897,40 +1338,38 @@ class _NoRouteFoundView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 36),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _NoRouteIllustration(),
-            const SizedBox(height: 28),
-            const Text(
-              'No routes found',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 19,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-              textAlign: TextAlign.center,
+    return _ScrollableCenter(
+      padding: const EdgeInsets.fromLTRB(36, 24, 36, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _NoRouteIllustration(),
+          const SizedBox(height: 28),
+          const Text(
+            'No routes found',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 19,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'You have no stops assigned for today yet.\nCheck back later or pull to refresh.',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-                color: AppColors.textSecondary,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'You have no stops assigned for today yet.\nCheck back later or pull to refresh.',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: AppColors.textSecondary,
+              height: 1.5,
             ),
-            const SizedBox(height: 28),
-            _TryAgainButton(onTap: onRetry),
-          ],
-        ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+          _TryAgainButton(onTap: onRetry),
+        ],
       ),
     );
   }
@@ -1011,16 +1450,13 @@ class _RouteBody extends ConsumerWidget {
     final route = state.route!;
     final stops = route.stops;
 
-    // Split into three sections so "done", "running", and "upcoming" stops
-    // are never mixed together in the same visual group.
+    // Completed/skipped stops belong to the Completed tab, not here — once
+    // a stop is done it leaves this list entirely instead of lingering in a
+    // "Done" group under Upcoming.
     final running =
         stops.where((s) => s.status == StopStatus.inProgress).toList();
     final upcoming =
         stops.where((s) => s.status == StopStatus.pending).toList();
-    final done = stops
-        .where((s) =>
-            s.status == StopStatus.completed || s.status == StopStatus.skipped)
-        .toList();
 
     final List<_ListItem> items = [
       if (running.isNotEmpty)
@@ -1036,13 +1472,6 @@ class _RouteBody extends ConsumerWidget {
           icon: Icons.schedule_rounded,
           color: AppColors.primary,
           stops: upcoming,
-        ),
-      if (done.isNotEmpty)
-        ..._buildSection(
-          label: 'Done',
-          icon: Icons.check_circle_rounded,
-          color: AppColors.success,
-          stops: done,
         ),
     ];
 

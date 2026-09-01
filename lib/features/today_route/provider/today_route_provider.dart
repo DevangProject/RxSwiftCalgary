@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/api_result.dart';
@@ -15,6 +18,8 @@ import '../model/route_model.dart';
 enum RouteLoadStatus { idle, loading, loaded, error }
 
 enum RouteStartStatus { idle, starting, active, completed }
+
+enum DriverOrdersLoadStatus { idle, loading, loaded, error }
 
 class TodayRouteState {
   const TodayRouteState({
@@ -36,6 +41,10 @@ class TodayRouteState {
     this.unacceptedOrders = const [],
     this.isAccepting = false,
     this.acceptErrorMessage,
+    // ── driver orders (Upcoming / Completed tabs) ──
+    this.driverOrders = const [],
+    this.driverOrdersLoadStatus = DriverOrdersLoadStatus.idle,
+    this.driverOrdersErrorMessage,
   });
 
   // ── Availability ─────────────────────────────────────────
@@ -80,6 +89,13 @@ class TodayRouteState {
   /// Last accept-order error message, surfaced to the screen as a SnackBar.
   final String? acceptErrorMessage;
 
+  // ── Driver orders (Upcoming / Completed tabs) ─────────────
+  /// Every order accepted by the driver (any stage), from GET /driver/orders.
+  /// Fetched lazily the first time the Upcoming/Completed tabs are opened.
+  final List<DriverOrder> driverOrders;
+  final DriverOrdersLoadStatus driverOrdersLoadStatus;
+  final String? driverOrdersErrorMessage;
+
   // ── Convenience getters ──────────────────────────────────
   bool get isLoading => loadStatus == RouteLoadStatus.loading;
   bool get isLoaded => loadStatus == RouteLoadStatus.loaded;
@@ -90,6 +106,19 @@ class TodayRouteState {
 
   int get completedStops =>
       route?.stops.where((s) => s.status == StopStatus.completed).length ?? 0;
+
+  bool get isDriverOrdersLoading =>
+      driverOrdersLoadStatus == DriverOrdersLoadStatus.loading;
+  bool get isDriverOrdersError =>
+      driverOrdersLoadStatus == DriverOrdersLoadStatus.error;
+
+  /// Orders not yet delivered/failed — still active work for the driver.
+  List<DriverOrder> get upcomingDriverOrders =>
+      driverOrders.where((o) => !o.isCompleted).toList();
+
+  /// Orders that reached a terminal state (delivered/failed).
+  List<DriverOrder> get completedDriverOrders =>
+      driverOrders.where((o) => o.isCompleted).toList();
 
   TodayRouteState copyWith({
     // availability
@@ -116,6 +145,11 @@ class TodayRouteState {
     bool? isAccepting,
     String? acceptErrorMessage,
     bool clearAcceptError = false,
+    // driver orders
+    List<DriverOrder>? driverOrders,
+    DriverOrdersLoadStatus? driverOrdersLoadStatus,
+    String? driverOrdersErrorMessage,
+    bool clearDriverOrdersError = false,
   }) {
     return TodayRouteState(
       isAvailable: isAvailable ?? this.isAvailable,
@@ -141,6 +175,12 @@ class TodayRouteState {
       acceptErrorMessage: clearAcceptError
           ? null
           : (acceptErrorMessage ?? this.acceptErrorMessage),
+      driverOrders: driverOrders ?? this.driverOrders,
+      driverOrdersLoadStatus:
+          driverOrdersLoadStatus ?? this.driverOrdersLoadStatus,
+      driverOrdersErrorMessage: clearDriverOrdersError
+          ? null
+          : (driverOrdersErrorMessage ?? this.driverOrdersErrorMessage),
     );
   }
 }
@@ -151,13 +191,34 @@ class TodayRouteState {
 
 class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
   TodayRouteNotifier(this._repository) : super(const TodayRouteState()) {
-    // Do NOT call loadRoute() here. Route is only loaded once the driver
-    // explicitly toggles availability ON.
+    // Route itself is never eagerly loaded here — only once the driver is
+    // (or, via _restoreAvailability, was already) available.
+    _restoreAvailability();
   }
 
   final RouteRepository _repository;
 
+  static const _isAvailableKey = 'driver_is_available';
+
   // ── Availability ──────────────────────────────────────────────────────────
+
+  /// Restores the driver's online/offline toggle from the last session so
+  /// they aren't forced to flip it on every time they reopen the app —
+  /// mirrors the usual gig-driver-app pattern where "online" persists until
+  /// the driver explicitly goes offline or logs out.
+  Future<void> _restoreAvailability() async {
+    final prefs = await SharedPreferences.getInstance();
+    final wasAvailable = prefs.getBool(_isAvailableKey) ?? false;
+    if (!wasAvailable) return;
+
+    state = state.copyWith(isAvailable: true);
+    await loadRoute();
+  }
+
+  Future<void> _persistAvailability(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_isAvailableKey, value);
+  }
 
   /// Called when the driver flips the availability switch.
   ///
@@ -181,6 +242,7 @@ class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
 
     switch (result) {
       case ApiSuccess():
+        await _persistAvailability(newValue);
         if (newValue) {
           // Driver turned ON — persist the new value then fetch route.
           state = state.copyWith(
@@ -284,6 +346,41 @@ class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
         state = state.copyWith(
           loadStatus: RouteLoadStatus.error,
           errorMessage: exception.message,
+          isSessionExpired: _isSessionExpired(exception),
+        );
+    }
+  }
+
+  // ── Driver orders (Upcoming / Completed tabs) ───────────────────────────
+
+  /// Fetches GET /driver/orders once and caches it — both the Upcoming and
+  /// Completed tabs read from this single list, split client-side by
+  /// [DriverOrder.isCompleted]. Called lazily the first time either tab is
+  /// opened; pass [force] to bypass the "already loaded" guard (e.g. pull to
+  /// refresh, or retrying after an error).
+  Future<void> loadDriverOrders({bool force = false}) async {
+    if (state.isDriverOrdersLoading) return;
+    if (!force && state.driverOrdersLoadStatus == DriverOrdersLoadStatus.loaded) {
+      return;
+    }
+
+    state = state.copyWith(
+      driverOrdersLoadStatus: DriverOrdersLoadStatus.loading,
+      clearDriverOrdersError: true,
+    );
+
+    final result = await _repository.getDriverOrders();
+
+    switch (result) {
+      case ApiSuccess(:final data):
+        state = state.copyWith(
+          driverOrdersLoadStatus: DriverOrdersLoadStatus.loaded,
+          driverOrders: data,
+        );
+      case ApiFailure(:final exception):
+        state = state.copyWith(
+          driverOrdersLoadStatus: DriverOrdersLoadStatus.error,
+          driverOrdersErrorMessage: exception.message,
           isSessionExpired: _isSessionExpired(exception),
         );
     }
@@ -420,6 +517,15 @@ class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
     if (allDone) {
       state = state.copyWith(startStatus: RouteStartStatus.completed);
     }
+
+    // The Completed tab reads from `driverOrders` (GET /driver/orders), a
+    // separate cache from `route.stops` — without this it stays stale until
+    // a manual pull-to-refresh, even though the stop above just moved to
+    // "Done". Force a background refetch so it reflects the new
+    // delivered/failed order as soon as this stop completes, no user action
+    // needed. Fire-and-forget: the Completed tab is a ConsumerWidget that
+    // rebuilds on its own once the state lands.
+    unawaited(loadDriverOrders(force: true));
   }
 
   void _setStopStatus(String stopId, StopStatus status) {
@@ -457,7 +563,17 @@ class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
   /// Wipes every trace of the current driver's session. Called on logout —
   /// this provider is not autoDispose, so without it the next driver to log
   /// in would inherit the previous one's route, availability and errors.
-  void reset() => state = const TodayRouteState();
+  void reset() {
+    state = const TodayRouteState();
+    // Clear the persisted toggle too — otherwise the next driver to log in
+    // on this device would open the app already "online".
+    unawaited(_clearPersistedAvailability());
+  }
+
+  Future<void> _clearPersistedAvailability() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_isAvailableKey);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────

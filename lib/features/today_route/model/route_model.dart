@@ -176,6 +176,7 @@ class TodayRoute {
     required this.routeDate,
     required this.totalStops,
     required this.totalOrders,
+    required this.totalDeliveredOrders,
     required this.estimatedDistanceKm,
     required this.stops,
   });
@@ -187,6 +188,10 @@ class TodayRoute {
   final DateTime? routeDate;
   final int totalStops;
   final int totalOrders;
+
+  /// Number of orders already delivered today — gates whether the
+  /// "Completed" tab bothers calling GET /driver/orders at all.
+  final int totalDeliveredOrders;
   final double estimatedDistanceKm;
   final List<RouteStop> stops;
 
@@ -203,6 +208,8 @@ class TodayRoute {
       routeDate: DateTime.tryParse(json['routeDate']?.toString() ?? ''),
       totalStops: (json['totalStops'] as num?)?.toInt() ?? stopsJson.length,
       totalOrders: (json['totalOrders'] as num?)?.toInt() ?? 0,
+      totalDeliveredOrders:
+          (json['totalDeliveredOrders'] as num?)?.toInt() ?? 0,
       estimatedDistanceKm:
       (json['estimatedDistanceKm'] as num?)?.toDouble() ?? 0,
       stops: stopsJson
@@ -220,6 +227,7 @@ class TodayRoute {
       routeDate: routeDate,
       totalStops: totalStops,
       totalOrders: totalOrders,
+      totalDeliveredOrders: totalDeliveredOrders,
       estimatedDistanceKm: estimatedDistanceKm,
       stops: stops ?? this.stops,
     );
@@ -302,6 +310,106 @@ class UnacceptedOrder {
       copayAmount: (json['copayAmount'] as num?)?.toDouble() ?? 0,
       priority: json['priority'] == true,
       rxNumber: json['rxNumber']?.toString(),
+      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Driver order — GET /api/driver/orders
+// ─────────────────────────────────────────────────────────────
+
+/// An order already accepted by the driver, at any stage from pickup through
+/// delivery. Backs the "Upcoming" / "Completed" tabs on the Tasks screen —
+/// unlike [RouteStop], this is order-level (one entry per order, not split
+/// into separate pickup/drop stops) and isn't scoped to today's route.
+@immutable
+class DriverOrder {
+  const DriverOrder({
+    required this.id,
+    required this.orderNumber,
+    required this.patientName,
+    required this.patientPhone,
+    required this.deliveryAddress,
+    required this.deliveryLatitude,
+    required this.deliveryLongitude,
+    required this.deliveryNotes,
+    required this.pharmacyName,
+    required this.pharmacyAddress,
+    required this.pharmacyPhone,
+    required this.pharmacyLatitude,
+    required this.pharmacyLongitude,
+    required this.status,
+    required this.statusLabel,
+    required this.pickupWindowLabel,
+    required this.handlingType,
+    required this.isRefrigerated,
+    required this.copayAmount,
+    required this.priority,
+    required this.rxNumber,
+    required this.assignedDriverId,
+    required this.createdAt,
+    required this.sortOrder,
+  });
+
+  final String id;
+  final String orderNumber;
+  final String patientName;
+  final String patientPhone;
+  final String deliveryAddress;
+  final double? deliveryLatitude;
+  final double? deliveryLongitude;
+  final String deliveryNotes;
+  final String pharmacyName;
+  final String pharmacyAddress;
+  final String pharmacyPhone;
+  final double? pharmacyLatitude;
+  final double? pharmacyLongitude;
+  final String status;
+  final String statusLabel;
+  final String pickupWindowLabel;
+  final String handlingType;
+  final bool isRefrigerated;
+  final double copayAmount;
+  final bool priority;
+  final String? rxNumber;
+  final String assignedDriverId;
+  final DateTime? createdAt;
+  final int sortOrder;
+
+  /// Orders that have reached a terminal state — everything else (assigned,
+  /// on route, picked up, ...) is still "upcoming" work for the driver.
+  bool get isCompleted {
+    final s = status.toUpperCase();
+    return s == 'DELIVERED' || s == 'FAILED';
+  }
+
+  factory DriverOrder.fromJson(Map<String, dynamic> json) {
+    return DriverOrder(
+      id: json['id']?.toString() ?? '',
+      orderNumber: json['orderNumber']?.toString() ?? '',
+      patientName: json['patientName']?.toString() ?? '',
+      patientPhone: json['patientPhone']?.toString() ?? '',
+      deliveryAddress: json['deliveryAddress']?.toString() ?? '',
+      deliveryLatitude: (json['deliveryLatitude'] as num?)?.toDouble(),
+      deliveryLongitude: (json['deliveryLongitude'] as num?)?.toDouble(),
+      deliveryNotes: json['deliveryNotes']?.toString() ?? '',
+      pharmacyName: json['pharmacyName']?.toString() ?? '',
+      pharmacyAddress: json['pharmacyAddress']?.toString() ?? '',
+      pharmacyPhone: json['pharmacyPhone']?.toString() ?? '',
+      pharmacyLatitude: (json['pharmacyLatitude'] as num?)?.toDouble(),
+      pharmacyLongitude: (json['pharmacyLongitude'] as num?)?.toDouble(),
+      status: json['status']?.toString() ?? '',
+      statusLabel: json['statusLabel']?.toString() ?? '',
+      pickupWindowLabel: json['pickupWindowLabel']?.toString() ?? '',
+      handlingType: json['handlingType']?.toString() ?? '',
+      isRefrigerated:
+          json['isRefrigerated']?.toString().toLowerCase() == 'yes',
+      copayAmount: (json['copayAmount'] as num?)?.toDouble() ?? 0,
+      priority: json['priority'] == true,
+      rxNumber: json['rxNumber']?.toString(),
+      assignedDriverId: json['assignedDriverId']?.toString() ?? '',
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
     );
   }

@@ -117,6 +117,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ref.read(notificationServiceProvider).registerDeviceToken();
       _navigateToTodayRoute();
     }
+
+    if (next.isError && next.errorMessage != null) {
+      AppDialogs.showSnackBar(
+        context,
+        next.errorMessage!,
+        isError: true,
+      );
+    }
   }
 
   void _showProgressDialog() {

@@ -33,6 +33,16 @@
         android:label="rxswift"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
+
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -71,7 +81,7 @@
             android:value="high_importance_channel"/>
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@mipmap/ic_launcher"/>
+            android:resource="@drawable/ic_notification"/>
 
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
