@@ -132,6 +132,23 @@ class RouteRemoteDatasource {
     );
   }
 
+  // ── Today's route (V2) — server orders stops using the driver's current
+  // coordinates, sent as `Latitude`/`Longitude` query params. ────────────
+
+  Future<ApiResult<TodayRoute>> getTodayRouteV2({
+    required double latitude,
+    required double longitude,
+  }) {
+    return _dioClient.get<TodayRoute>(
+      RouteApiConstants.todayRouteV2,
+      queryParameters: {
+        'Latitude': latitude,
+        'Longitude': longitude,
+      },
+      fromJson: (json) => TodayRoute.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
   // ── Update driver status ────────────────────────────────────────────────
 
   Future<ApiResult<bool>> updateDriverStatus({required String status}) {

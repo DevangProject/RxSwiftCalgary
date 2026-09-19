@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -10,6 +11,7 @@ import '../../../uttils/app_constants.dart';
 import '../data/route_remote_datasource.dart';
 import '../data/route_repository.dart';
 import '../model/route_model.dart';
+import 'route_location_service.dart';
 
 // ─────────────────────────────────────────────────────────────
 //  State
@@ -21,6 +23,22 @@ enum RouteStartStatus { idle, starting, active, completed }
 
 enum DriverOrdersLoadStatus { idle, loading, loaded, error }
 
+/// State of the "usable current location" gate that sits in front of the
+/// today-routeV2 call. `none` means the gate isn't currently blocking —
+/// either it hasn't run yet or it already resolved (successfully or into a
+/// plain API [RouteLoadStatus.error]). While any other value is set,
+/// [RouteLoadStatus] is held at `loading` and the screen shows the matching
+/// recovery UI instead of route content.
+enum LocationGateStatus {
+  none,
+  checking,
+  serviceDisabled,
+  permissionDenied,
+  permissionDeniedForever,
+  obtaining,
+  failed,
+}
+
 class TodayRouteState {
   const TodayRouteState({
     // ── availability ──
@@ -30,6 +48,7 @@ class TodayRouteState {
     this.isSessionExpired = false,
     // ── route load ──
     this.loadStatus = RouteLoadStatus.idle,
+    this.locationGateStatus = LocationGateStatus.none,
     this.startStatus = RouteStartStatus.idle,
     this.route,
     this.errorMessage,
@@ -63,6 +82,10 @@ class TodayRouteState {
 
   // ── Route load ───────────────────────────────────────────
   final RouteLoadStatus loadStatus;
+
+  /// Status of the current-location gate that runs before today-routeV2.
+  /// See [LocationGateStatus] for what each value means for the UI.
+  final LocationGateStatus locationGateStatus;
   final RouteStartStatus startStatus;
   final TodayRoute? route;
   final String? errorMessage;
@@ -100,6 +123,18 @@ class TodayRouteState {
   bool get isLoading => loadStatus == RouteLoadStatus.loading;
   bool get isLoaded => loadStatus == RouteLoadStatus.loaded;
   bool get isError => loadStatus == RouteLoadStatus.error;
+
+  // ── Location gate convenience getters ─────────────────────
+  bool get isCheckingLocation => locationGateStatus == LocationGateStatus.checking;
+  bool get isObtainingLocation => locationGateStatus == LocationGateStatus.obtaining;
+  bool get needsLocationServiceEnable =>
+      locationGateStatus == LocationGateStatus.serviceDisabled;
+  bool get needsLocationPermission =>
+      locationGateStatus == LocationGateStatus.permissionDenied;
+  bool get needsLocationPermissionForever =>
+      locationGateStatus == LocationGateStatus.permissionDeniedForever;
+  bool get isLocationFetchFailed => locationGateStatus == LocationGateStatus.failed;
+  bool get isLocationGateBlocking => locationGateStatus != LocationGateStatus.none;
   bool get isRouteActive => startStatus == RouteStartStatus.active;
   bool get isRouteCompleted => startStatus == RouteStartStatus.completed;
   bool get hasUnacceptedOrders => unacceptedOrders.isNotEmpty;
@@ -129,6 +164,7 @@ class TodayRouteState {
     bool? isSessionExpired,
     // route load
     RouteLoadStatus? loadStatus,
+    LocationGateStatus? locationGateStatus,
     RouteStartStatus? startStatus,
     TodayRoute? route,
     bool clearRoute = false,
@@ -160,6 +196,7 @@ class TodayRouteState {
           : (availabilityErrorMessage ?? this.availabilityErrorMessage),
       isSessionExpired: isSessionExpired ?? this.isSessionExpired,
       loadStatus: loadStatus ?? this.loadStatus,
+      locationGateStatus: locationGateStatus ?? this.locationGateStatus,
       startStatus: startStatus ?? this.startStatus,
       route: clearRoute ? null : (route ?? this.route),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
@@ -190,13 +227,20 @@ class TodayRouteState {
 // ─────────────────────────────────────────────────────────────
 
 class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
-  TodayRouteNotifier(this._repository) : super(const TodayRouteState()) {
+  TodayRouteNotifier(this._repository, this._locationService)
+      : super(const TodayRouteState()) {
     // Route itself is never eagerly loaded here — only once the driver is
     // (or, via _restoreAvailability, was already) available.
     _restoreAvailability();
   }
 
   final RouteRepository _repository;
+  final RouteLocationService _locationService;
+
+  /// Guards the location-gate + today-routeV2 sequence against duplicate
+  /// concurrent runs — e.g. a manual "Try Again" tap racing with an
+  /// app-resume recheck after the driver returns from Settings.
+  bool _isFetchingRoute = false;
 
   static const _isAvailableKey = 'driver_is_available';
 
@@ -317,8 +361,9 @@ class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
           );
           return;
         }
-        // No unaccepted orders — fall through to today's route.
-        await _loadTodayRoute();
+        // No unaccepted orders — get a usable location, then fetch the
+        // actual route (today-routeV2).
+        await _fetchTodayRouteWithLocation();
       case ApiFailure(:final exception):
         state = state.copyWith(
           loadStatus: RouteLoadStatus.error,
@@ -328,26 +373,129 @@ class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
     }
   }
 
-  Future<void> _loadTodayRoute() async {
+  // ── Location gate + today-routeV2 ───────────────────────────────────────
+
+  /// Obtains a usable current location (checking service + permission first)
+  /// and, on success, calls today-routeV2 with it. Safe to call repeatedly —
+  /// re-entrant calls while one is already in flight are ignored, so a
+  /// "Try Again" tap or an app-resume recheck can never fire a duplicate
+  /// request.
+  Future<void> _fetchTodayRouteWithLocation() async {
+    if (_isFetchingRoute) return;
+    _isFetchingRoute = true;
+    try {
+      final position = await _ensureLocation();
+      if (position == null) return; // state already reflects why we stopped
+
+      state = state.copyWith(
+        loadStatus: RouteLoadStatus.loading,
+        clearError: true,
+      );
+
+      final result = await _repository.getTodayRouteV2(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+
+      switch (result) {
+        case ApiSuccess(:final data):
+          state = state.copyWith(
+            loadStatus: RouteLoadStatus.loaded,
+            route: data,
+          );
+        case ApiFailure(:final exception):
+          state = state.copyWith(
+            loadStatus: RouteLoadStatus.error,
+            errorMessage: exception.message,
+            isSessionExpired: _isSessionExpired(exception),
+          );
+      }
+    } finally {
+      _isFetchingRoute = false;
+    }
+  }
+
+  /// Checks device location services + app permission and, once both are
+  /// satisfied, returns a fresh GPS fix. Returns null and leaves
+  /// [TodayRouteState.locationGateStatus] set to the blocking reason
+  /// whenever the driver can't proceed yet — the screen reads that to show
+  /// the matching recovery UI (turn on location / try again / open settings)
+  /// instead of an infinite spinner.
+  Future<Position?> _ensureLocation() async {
     state = state.copyWith(
+      locationGateStatus: LocationGateStatus.checking,
       loadStatus: RouteLoadStatus.loading,
       clearError: true,
     );
 
-    final result = await _repository.getTodayRoute();
+    final serviceEnabled = await _locationService.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      state = state.copyWith(
+        locationGateStatus: LocationGateStatus.serviceDisabled,
+      );
+      return null;
+    }
 
-    switch (result) {
-      case ApiSuccess(:final data):
-        state = state.copyWith(
-          loadStatus: RouteLoadStatus.loaded,
-          route: data,
-        );
-      case ApiFailure(:final exception):
-        state = state.copyWith(
-          loadStatus: RouteLoadStatus.error,
-          errorMessage: exception.message,
-          isSessionExpired: _isSessionExpired(exception),
-        );
+    var permission = await _locationService.checkPermission();
+    if (permission == LocationPermission.denied) {
+      // Not yet granted — ask through the platform's normal permission
+      // flow. (The screen shows a brief "why we need this" explanation
+      // alongside the checking/obtaining state.)
+      permission = await _locationService.requestPermission();
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      state = state.copyWith(
+        locationGateStatus: LocationGateStatus.permissionDeniedForever,
+      );
+      return null;
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.unableToDetermine) {
+      state = state.copyWith(
+        locationGateStatus: LocationGateStatus.permissionDenied,
+      );
+      return null;
+    }
+
+    state = state.copyWith(locationGateStatus: LocationGateStatus.obtaining);
+    try {
+      final position = await _locationService.getCurrentPosition();
+      state = state.copyWith(locationGateStatus: LocationGateStatus.none);
+      return position;
+    } catch (_) {
+      state = state.copyWith(
+        locationGateStatus: LocationGateStatus.failed,
+        errorMessage: 'Could not get your current location. Please try again.',
+      );
+      return null;
+    }
+  }
+
+  /// "Try Again" — re-runs the whole location gate from scratch. Also used
+  /// to recover from a plain GPS-fetch failure ([LocationGateStatus.failed]).
+  Future<void> retryLocationAccess() => _fetchTodayRouteWithLocation();
+
+  /// "Turn on Location" — opens the device's location-services setting.
+  Future<void> openLocationSettings() async {
+    await _locationService.openLocationSettings();
+  }
+
+  /// "Open App Settings" — for permanently-denied permission.
+  Future<void> openAppSettingsForLocation() async {
+    await _locationService.openAppSettings();
+  }
+
+  /// Called when the app resumes (e.g. the driver comes back from Settings).
+  /// Only re-runs the gate when it's actually the thing blocking the
+  /// screen — a no-op resume elsewhere in the app never triggers an
+  /// unwanted request.
+  void recheckLocationIfPending() {
+    final blocked = state.needsLocationServiceEnable ||
+        state.needsLocationPermission ||
+        state.needsLocationPermissionForever;
+    if (blocked) {
+      unawaited(_fetchTodayRouteWithLocation());
     }
   }
 
@@ -411,7 +559,7 @@ class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
           isAccepting: false,
           unacceptedOrders: const [],
         );
-        await _loadTodayRoute();
+        await _fetchTodayRouteWithLocation();
       case ApiFailure(:final exception):
         state = state.copyWith(
           isAccepting: false,
@@ -582,5 +730,8 @@ class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
 
 final todayRouteProvider =
 StateNotifierProvider<TodayRouteNotifier, TodayRouteState>(
-      (ref) => TodayRouteNotifier(ref.watch(routeRepositoryProvider)),
+      (ref) => TodayRouteNotifier(
+    ref.watch(routeRepositoryProvider),
+    ref.watch(routeLocationServiceProvider),
+  ),
 );

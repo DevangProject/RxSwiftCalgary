@@ -64,8 +64,31 @@ class TodayRouteScreen extends ConsumerStatefulWidget {
   ConsumerState<TodayRouteScreen> createState() => _TodayRouteScreenState();
 }
 
-class _TodayRouteScreenState extends ConsumerState<TodayRouteScreen> {
+class _TodayRouteScreenState extends ConsumerState<TodayRouteScreen>
+    with WidgetsBindingObserver {
   _TasksTab _selectedTab = _TasksTab.upcoming;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The driver may have just come back from the device's location
+    // settings or the app's permission settings — re-check, but only if a
+    // location gate is actually what's blocking the screen right now.
+    if (state == AppLifecycleState.resumed) {
+      ref.read(todayRouteProvider.notifier).recheckLocationIfPending();
+    }
+  }
 
   void _selectTab(_TasksTab tab) {
     if (_selectedTab == tab) return;
@@ -224,6 +247,62 @@ class _TodayRouteScreenState extends ConsumerState<TodayRouteScreen> {
         onRetry: notifier.refresh,
       );
     }
+
+    // ── Location gate ───────────────────────────────────────────────────
+    // Today Route needs a usable current location before its content (or
+    // even the unaccepted-orders list) is fetched. Takes priority over the
+    // normal load-status views below while it's actively blocking.
+    switch (state.locationGateStatus) {
+      case LocationGateStatus.serviceDisabled:
+        return _LocationActionView(
+          key: const ValueKey('location-service-disabled'),
+          icon: Icons.location_disabled_rounded,
+          title: 'Turn on location',
+          message:
+              "Location services are off. Turn them on so we can load today's route.",
+          buttonLabel: 'Turn On Location',
+          buttonIcon: Icons.location_on_rounded,
+          onTap: notifier.openLocationSettings,
+        );
+      case LocationGateStatus.permissionDenied:
+        return _LocationActionView(
+          key: const ValueKey('location-permission-denied'),
+          icon: Icons.location_off_rounded,
+          title: 'Location access needed',
+          message:
+              "We need your location to load today's route. Please allow location access to continue.",
+          buttonLabel: 'Try Again',
+          buttonIcon: Icons.refresh_rounded,
+          onTap: notifier.retryLocationAccess,
+        );
+      case LocationGateStatus.permissionDeniedForever:
+        return _LocationActionView(
+          key: const ValueKey('location-permission-forever'),
+          icon: Icons.location_off_rounded,
+          title: 'Location access blocked',
+          message:
+              'Location access is permanently denied. Please enable it from app settings to continue.',
+          buttonLabel: 'Open App Settings',
+          buttonIcon: Icons.settings_rounded,
+          onTap: notifier.openAppSettingsForLocation,
+        );
+      case LocationGateStatus.failed:
+        return _ErrorView(
+          key: const ValueKey('location-failed'),
+          message: state.errorMessage ??
+              'Could not get your current location. Please try again.',
+          onRetry: notifier.retryLocationAccess,
+        );
+      case LocationGateStatus.checking:
+      case LocationGateStatus.obtaining:
+        return const _LoadingView(
+          key: ValueKey('location-loading'),
+          message: "Getting your location for today's route...",
+        );
+      case LocationGateStatus.none:
+        break;
+    }
+
     if (state.isLoading) {
       return const _LoadingView(key: ValueKey('loading'));
     }
@@ -1263,16 +1342,129 @@ class _TryAgainButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
+//  Location gate recovery view — "Turn on location" /
+//  "Try Again" (permission denied) / "Open App Settings"
+//  (permission permanently denied).
+// ─────────────────────────────────────────────────────────────
+
+class _LocationActionView extends StatelessWidget {
+  const _LocationActionView({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.buttonLabel,
+    required this.buttonIcon,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String buttonLabel;
+  final IconData buttonIcon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ScrollableCenter(
+      padding: const EdgeInsets.fromLTRB(36, 24, 36, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.primary.withValues(alpha: 0.10),
+            ),
+            child: Icon(icon, size: 42, color: AppColors.primary),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            title,
+            style: const TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 19,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: const TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: AppColors.textSecondary,
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(AppRadius.full),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                  gradient: const LinearGradient(
+                    colors: [AppColors.primary, AppColors.teal],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.30),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(buttonIcon, size: 18, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Text(
+                      buttonLabel,
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 //  Loading
 // ─────────────────────────────────────────────────────────────
 
 class _LoadingView extends StatelessWidget {
-  const _LoadingView({super.key});
+  const _LoadingView({super.key, this.message});
+
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
-    return const AppProgressLoader(
-      message: "Loading today's route...",
+    return AppProgressLoader(
+      message: message ?? "Loading today's route...",
     );
   }
 }

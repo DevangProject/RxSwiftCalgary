@@ -19,6 +19,12 @@ class RouteRepository {
 
   Future<ApiResult<TodayRoute>> getTodayRoute() => _datasource.getTodayRoute();
 
+  Future<ApiResult<TodayRoute>> getTodayRouteV2({
+    required double latitude,
+    required double longitude,
+  }) =>
+      _datasource.getTodayRouteV2(latitude: latitude, longitude: longitude);
+
   Future<ApiResult<bool>> updateDriverStatus({required String status}) =>
       _datasource.updateDriverStatus(status: status);
 

@@ -12,6 +12,11 @@ class RouteApiConstants {
   /// Adjust to match the actual path your existing getTodayRoute() hits.
   static const String todayRoute = '/driver/today-route';
 
+  /// GET — today's route for the logged-in driver, ordered by the server
+  /// using the driver's current coordinates (sent as `Latitude`/`Longitude`
+  /// query params).
+  static const String todayRouteV2 = '/driver/today-routeV2';
+
   /// PATCH — update the driver's current status (e.g. on-route).
   /// Adjust to match the actual path youFr existing updateDriverStatus() hits.
   static const String driverStatus = '/driver/status';
