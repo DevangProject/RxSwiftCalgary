@@ -102,6 +102,10 @@ class NotificationService {
   }
 
   void _showForegroundNotification(RemoteMessage message) {
+    // iOS already presents foreground pushes itself via
+    // setForegroundNotificationPresentationOptions — showing a local copy
+    // as well would duplicate every notification.
+    if (defaultTargetPlatform != TargetPlatform.android) return;
     final notification = message.notification;
     if (notification == null) return;
 
@@ -138,16 +142,12 @@ class NotificationService {
         await Future.delayed(const Duration(seconds: 1));
         apnsToken = await FirebaseMessaging.instance.getAPNSToken();
       }
-      debugPrint('APNs Token: $apnsToken');
-      if (apnsToken == null) {
-        debugPrint('No APNs token — cannot fetch FCM token (Intel simulator '
-            'or iOS < 16 cannot receive push tokens).');
-        return;
-      }
+      // No APNs token: Intel simulator or iOS < 16 cannot receive pushes.
+      if (apnsToken == null) return;
     }
 
+    // Tokens are credentials for this device's push channel — never log them.
     final token = await FirebaseMessaging.instance.getToken();
-    debugPrint('FCM Token: $token');
     if (token != null) await _sendTokenSilently(token);
   }
 

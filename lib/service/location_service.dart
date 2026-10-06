@@ -38,23 +38,19 @@ class LocationService {
     return LatLng(position.latitude, position.longitude);
   }
 
-  /// On iOS, background updates are enabled directly here: given "Always"
-  /// permission and the `UIBackgroundModes: location` Info.plist entry, this
-  /// keeps CoreLocation delivering updates (and keeps the app process alive)
-  /// while backgrounded — no extra plugin needed.
+  /// On iOS the app only holds "When In Use" permission and does not declare
+  /// the `location` background mode, so updates are foreground-only — the
+  /// stream pauses when the app is backgrounded.
   ///
-  /// Android has no equivalent single-isolate trick (backgrounding the
-  /// activity suspends the Dart isolate regardless of stream settings), so
-  /// background continuity there is handled separately by
+  /// Android background continuity is handled separately by
   /// [BackgroundLocationService], not by this stream.
   Stream<Position> liveLocationStream({int distanceFilterMeters = 10}) {
     final LocationSettings settings = Platform.isIOS
         ? AppleSettings(
             accuracy: LocationAccuracy.bestForNavigation,
             distanceFilter: distanceFilterMeters,
-            allowBackgroundLocationUpdates: true,
+            allowBackgroundLocationUpdates: false,
             pauseLocationUpdatesAutomatically: false,
-            showBackgroundLocationIndicator: true,
           )
         : LocationSettings(
             accuracy: LocationAccuracy.bestForNavigation,

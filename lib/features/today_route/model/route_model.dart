@@ -40,7 +40,10 @@ extension StopTypeX on StopType {
 enum StopStatus { pending, inProgress, completed, skipped }
 
 extension StopStatusX on StopStatus {
-  static StopStatus fromApi(String? raw) {
+  /// [type] matters because the API sends the *order's* status on each
+  /// stop: `PICKED_UP` finishes a pickup stop, but on a drop stop it means
+  /// the order is in the vehicle and still waiting to be delivered.
+  static StopStatus fromApi(String? raw, {StopType type = StopType.drop}) {
     switch ((raw ?? '').toUpperCase()) {
       case 'PENDING':
         return StopStatus.pending;
@@ -48,9 +51,10 @@ extension StopStatusX on StopStatus {
       case 'IN_PROGRESS':
       case 'IN-PROGRESS':
         return StopStatus.inProgress;
+      case 'PICKED_UP':
+        return type.isPickup ? StopStatus.completed : StopStatus.pending;
       case 'COMPLETED':
       case 'DELIVERED':
-      case 'PICKED_UP':
         return StopStatus.completed;
       case 'SKIPPED':
       case 'FAILED':
@@ -131,7 +135,7 @@ class RouteStop {
       address: json['address']?.toString() ?? '',
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
-      status: StopStatusX.fromApi(json['status']?.toString()),
+      status: StopStatusX.fromApi(json['status']?.toString(), type: type),
       statusLabel: json['statusLabel']?.toString() ?? '',
       priority: json['priority'] == true,
       distanceKm:

@@ -61,6 +61,7 @@ class FakeRouteRepository extends RouteRepository {
       routeDate: DateTime(2026, 6, 18),
       totalStops: 0,
       totalOrders: 0,
+      totalDeliveredOrders: 0,
       estimatedDistanceKm: 0,
       stops: const [],
     ));

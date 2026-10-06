@@ -285,11 +285,11 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
   }
 
   /// Keeps the backend updated with the driver's position for the rest of
-  /// the navigation session, including while the app is backgrounded.
+  /// the navigation session.
   /// Android: a persistent foreground-service isolate (survives the main
-  /// isolate being suspended). iOS: a periodic timer is enough because
-  /// LocationService's AppleSettings already keep the main isolate alive
-  /// in the background.
+  /// isolate being suspended). iOS: a periodic timer while the app is in the
+  /// foreground — iOS has no background location mode, so the timer simply
+  /// pauses when the app is suspended.
   void _startBackgroundLocationSync() {
     if (Platform.isAndroid) {
       _backgroundLocationService.start();
@@ -297,11 +297,7 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
       _iosBackgroundSyncTimer?.cancel();
       _iosBackgroundSyncTimer = Timer.periodic(
         _iosBackgroundSyncInterval,
-        (_) {
-          final loc = state.driverLocation;
-          print('[BackgroundLocation] ${DateTime.now()} lat: ${loc?.latitude}, lng: ${loc?.longitude}');
-          _locationSyncRepository.syncOnce();
-        },
+        (_) => _locationSyncRepository.syncOnce(),
       );
     }
   }

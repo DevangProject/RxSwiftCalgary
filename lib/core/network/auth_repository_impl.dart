@@ -35,6 +35,7 @@ class AuthRepositoryImpl implements AuthRepository {
       await _tokenStorage.saveAccessTokenExpiry(data.accessTokenExpiresAt);
       await _tokenStorage.saveRefreshTokenExpiry(data.refreshTokenExpiresAt);
       await _tokenStorage.saveUserId(data.user.id);
+      await _tokenStorage.saveUserFullName(data.user.fullName);
     }
 
     return result;

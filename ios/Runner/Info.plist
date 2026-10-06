@@ -30,10 +30,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>We need camera access to take a delivery confirmation photo.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Your location is used to navigate you to delivery customers and share your live position with dispatch, including while the app is in the background.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Your location is used to navigate you to delivery customers and track your delivery route in real time.</string>
+	<string>Your location is used to help you navigate from the pharmacy to the delivery destination and complete assigned deliveries.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

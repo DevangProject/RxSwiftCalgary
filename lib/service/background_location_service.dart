@@ -11,11 +11,9 @@
 // provides via its TaskHandler (this is also geolocator's own documented
 // recommendation for background-after-kill tracking).
 //
-// iOS doesn't need this: given "Always" permission + UIBackgroundModes:
-// location, LocationService.liveLocationStream()'s AppleSettings keeps the
-// app's own isolate alive in the background, so iOS syncs location straight
-// from NavigationNotifier instead of through a second engine. start()/stop()
-// below are no-ops on iOS.
+// iOS does not track location in the background: the app requests only
+// "When In Use" permission and declares no `location` background mode.
+// start()/stop() below are no-ops on iOS.
 // ============================================================================
 
 import 'dart:io';
@@ -64,7 +62,6 @@ class _LocationTaskHandler extends TaskHandler {
         desiredAccuracy: LocationAccuracy.high,
         timeLimit: const Duration(seconds: 15),
       );
-      print('[BackgroundLocation] ${DateTime.now()} lat: ${position.latitude}, lng: ${position.longitude}');
 
       const storage = FlutterSecureStorage(
         aOptions: AndroidOptions(encryptedSharedPreferences: true),

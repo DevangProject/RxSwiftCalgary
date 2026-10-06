@@ -15,6 +15,7 @@ class TokenStorage {
   static const _accessExpiryKey = 'access_token_expires_at';
   static const _refreshExpiryKey = 'refresh_token_expires_at';
   static const _userIdKey = 'user_id';
+  static const _userFullNameKey = 'user_full_name';
 
   // ── Access token ─────────────────────────────────────────────
 
@@ -76,6 +77,13 @@ class TokenStorage {
 
   Future<String?> readUserId() => _storage.read(key: _userIdKey);
 
+  // ── User full name (shown in the home app bar) ───────────────
+
+  Future<void> saveUserFullName(String name) =>
+      _storage.write(key: _userFullNameKey, value: name);
+
+  Future<String?> readUserFullName() => _storage.read(key: _userFullNameKey);
+
   // ── Clear all (logout) ───────────────────────────────────────
 
   Future<void> clearAll() => _storage.deleteAll();
@@ -88,4 +96,10 @@ final tokenStorageProvider = Provider<TokenStorage>((ref) {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
   return TokenStorage(storage);
+});
+
+/// The logged-in driver's full name, as saved at login. autoDispose so a
+/// later login (after logout clears storage) re-reads the new driver's name.
+final driverFullNameProvider = FutureProvider.autoDispose<String?>((ref) {
+  return ref.watch(tokenStorageProvider).readUserFullName();
 });

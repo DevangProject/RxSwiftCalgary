@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rxswift/features/today_route/provider/today_route_provider.dart';
 
 import '../../core/network/auth_repository_impl.dart';
+import '../../core/utils/token_storage.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_progress_dialoug.dart';
 import '../auth/login_screen.dart';
@@ -751,6 +752,16 @@ class _HomeAppBar extends ConsumerWidget {
     final isOn = state.isAvailable;
     final isUpdating = state.isAvailabilityUpdating;
 
+    // Name saved at login; fall back to today-route's driverName for
+    // sessions that logged in before the name was being stored.
+    final storedName = ref.watch(driverFullNameProvider).valueOrNull?.trim();
+    final routeName = state.route?.driverName.trim();
+    final driverName = (storedName != null && storedName.isNotEmpty)
+        ? storedName
+        : (routeName != null && routeName.isNotEmpty)
+            ? routeName
+            : 'Welcome back';
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
       decoration: const BoxDecoration(
@@ -803,9 +814,11 @@ class _HomeAppBar extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Welcome back',
-                      style: TextStyle(
+                    Text(
+                      driverName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 12,
                         fontWeight: FontWeight.w500,

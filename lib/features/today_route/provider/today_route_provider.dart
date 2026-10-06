@@ -674,6 +674,34 @@ class TodayRouteNotifier extends StateNotifier<TodayRouteState> {
     // needed. Fire-and-forget: the Completed tab is a ConsumerWidget that
     // rebuilds on its own once the state lands.
     unawaited(loadDriverOrders(force: true));
+
+    // The header's "Total routes" / "Done" counts come from today-route's
+    // totalStops / totalDeliveredOrders, which only the server can update —
+    // refetch quietly so they reflect this completion.
+    unawaited(_refreshRouteSilently());
+  }
+
+  /// Re-fetches today-routeV2 in the background without touching
+  /// [TodayRouteState.loadStatus] or the location gate, so the current
+  /// list stays on screen (no spinner, no gate views). Failures are ignored
+  /// — the existing route stays as-is until the next explicit refresh.
+  Future<void> _refreshRouteSilently() async {
+    if (_isFetchingRoute) return;
+    _isFetchingRoute = true;
+    try {
+      final position = await _locationService.getCurrentPosition();
+      final result = await _repository.getTodayRouteV2(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      if (result case ApiSuccess(:final data)) {
+        state = state.copyWith(route: data);
+      }
+    } catch (_) {
+      // Location unavailable — keep the current route.
+    } finally {
+      _isFetchingRoute = false;
+    }
   }
 
   void _setStopStatus(String stopId, StopStatus status) {
