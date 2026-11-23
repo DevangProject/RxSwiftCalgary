@@ -17,8 +17,18 @@ import 'model/order_detail_model.dart';
 import 'route_detail_provider.dart';
 
 const _monthNames = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
 String _formatTimestamp(DateTime? dt) {
@@ -58,7 +68,9 @@ class _CompletedOrderDetailSheet extends ConsumerWidget {
         return Container(
           decoration: const BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.xl),
+            ),
           ),
           child: Column(
             children: [
@@ -71,9 +83,7 @@ class _CompletedOrderDetailSheet extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(AppRadius.full),
                 ),
               ),
-              Expanded(
-                child: _buildBody(context, state, scrollController),
-              ),
+              Expanded(child: _buildBody(context, state, scrollController)),
             ],
           ),
         );
@@ -81,8 +91,11 @@ class _CompletedOrderDetailSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildBody(BuildContext context, RouteDetailState state,
-      ScrollController scrollController) {
+  Widget _buildBody(
+    BuildContext context,
+    RouteDetailState state,
+    ScrollController scrollController,
+  ) {
     final detail = state.orderDetail;
 
     if (state.isLoading && detail == null) {
@@ -96,8 +109,11 @@ class _CompletedOrderDetailSheet extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded,
-                  size: 40, color: AppColors.textSecondary),
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 40,
+                color: AppColors.textSecondary,
+              ),
               const SizedBox(height: 12),
               Text(
                 state.errorMessage ?? 'Something went wrong',
@@ -194,7 +210,9 @@ class _Header extends StatelessWidget {
                 ),
               ),
               Text(
-                detail.statusLabel.isNotEmpty ? detail.statusLabel : 'Delivered',
+                detail.statusLabel.isNotEmpty
+                    ? detail.statusLabel
+                    : 'Delivered',
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 13,
@@ -263,16 +281,20 @@ class _PhotoSection extends StatelessWidget {
             child: imageUrl == null
                 ? Container(
                     color: AppColors.background,
-                    child: const Icon(Icons.image_not_supported_outlined,
-                        color: AppColors.textHint),
+                    child: const Icon(
+                      Icons.image_not_supported_outlined,
+                      color: AppColors.textHint,
+                    ),
                   )
                 : Image.network(
                     imageUrl!,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorBuilder: (_, _, _) => Container(
                       color: AppColors.background,
-                      child: const Icon(Icons.broken_image_outlined,
-                          color: AppColors.textHint),
+                      child: const Icon(
+                        Icons.broken_image_outlined,
+                        color: AppColors.textHint,
+                      ),
                     ),
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
@@ -349,9 +371,7 @@ class _TimelineRow extends StatelessWidget {
                 ),
               ),
               if (!isLast)
-                Expanded(
-                  child: Container(width: 1, color: AppColors.border),
-                ),
+                Expanded(child: Container(width: 1, color: AppColors.border)),
             ],
           ),
           const SizedBox(width: 12),
@@ -362,7 +382,9 @@ class _TimelineRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    entry.statusLabel.isNotEmpty ? entry.statusLabel : entry.status,
+                    entry.statusLabel.isNotEmpty
+                        ? entry.statusLabel
+                        : entry.status,
                     style: const TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 14,

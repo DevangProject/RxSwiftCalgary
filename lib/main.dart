@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'features/splash/splash_screen.dart';
 import 'firebase_options.dart';
 import 'service/background_location_service.dart';
@@ -23,6 +24,9 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   BackgroundLocationService().initialize();
 
+  // Keep the screen on for as long as the app is in the foreground.
+  WakelockPlus.enable();
+
   runApp(
     const ProviderScope(
       child: RxSwiftApp(),
@@ -37,11 +41,26 @@ class RxSwiftApp extends ConsumerStatefulWidget {
   ConsumerState<RxSwiftApp> createState() => _RxSwiftAppState();
 }
 
-class _RxSwiftAppState extends ConsumerState<RxSwiftApp> {
+class _RxSwiftAppState extends ConsumerState<RxSwiftApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     ref.read(notificationServiceProvider).initialize();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // The OS can drop the wakelock while the app is backgrounded — re-acquire
+  // it every time the driver comes back to the app.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) WakelockPlus.enable();
   }
 
   @override

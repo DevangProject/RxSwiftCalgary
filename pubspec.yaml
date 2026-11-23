@@ -78,6 +78,7 @@ dependencies:
   # which only exists in the iOS 26 SDK (Xcode 26). This project builds with
   # Xcode 16.3 / iOS 18.4 SDK. 6.x exposes the same List<ConnectivityResult> API.
   connectivity_plus: ^6.1.0
+  wakelock_plus: ^1.5.2
 
 
 dev_dependencies:

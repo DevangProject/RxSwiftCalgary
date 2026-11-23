@@ -7,6 +7,7 @@ import '../../uttils/app_constants.dart';
 import '../utils/connectivity_service.dart';
 import '../utils/token_storage.dart';
 import 'api_result.dart';
+import 'auth_interceptor.dart';
 import 'network_exception.dart';
 
 
@@ -40,19 +41,10 @@ class DioClient {
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
     );
 
-    // Auth token injection
+    // Auth token injection + silent token refresh, so the session never
+    // expires while the app is in use.
     _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final token = await _tokenStorage.readToken();
-          if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
-          }
-          handler.next(options);
-        },
-        onResponse: (response, handler) => handler.next(response),
-        onError: (error, handler) => handler.next(error),
-      ),
+      AuthInterceptor(tokenStorage: _tokenStorage, dio: _dio),
     );
 
     // Pretty logging — debug builds only
